@@ -1,0 +1,86 @@
+name: Sponsor roster
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+    - cron: '17 4 2 * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: sponsor-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.merge.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Query Afdian and merge verified grants
+        id: merge
+        env:
+          AF_USER_ID: ${{ secrets.AF_USER_ID }}
+          AF_TOKEN: ${{ secrets.AF_TOKEN }}
+          MM_INDEX: ${{ secrets.MM_INDEX }}
+          MM_PART_0: ${{ secrets.MM_PART_0 }}
+          MM_PART_1: ${{ secrets.MM_PART_1 }}
+          MM_PART_2: ${{ secrets.MM_PART_2 }}
+          MM_PART_3: ${{ secrets.MM_PART_3 }}
+          MM_PART_4: ${{ secrets.MM_PART_4 }}
+          MM_PART_5: ${{ secrets.MM_PART_5 }}
+          MM_PART_6: ${{ secrets.MM_PART_6 }}
+          MM_PART_7: ${{ secrets.MM_PART_7 }}
+          MM_PART_8: ${{ secrets.MM_PART_8 }}
+          MM_PART_9: ${{ secrets.MM_PART_9 }}
+          MM_PART_10: ${{ secrets.MM_PART_10 }}
+          MM_PART_11: ${{ secrets.MM_PART_11 }}
+          MM_PART_12: ${{ secrets.MM_PART_12 }}
+          MM_PART_13: ${{ secrets.MM_PART_13 }}
+          MM_PART_14: ${{ secrets.MM_PART_14 }}
+          MM_PART_15: ${{ secrets.MM_PART_15 }}
+          PUBLIC_ROSTER_URL: https://775812513tokisaki-star.github.io/micrometropolis-sponsor-sync/roster.txt
+        run: python3 publish.py
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.merge.outputs.changed == 'true'
+        with:
+          path: site
+  deploy:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4
+  heartbeat:
+    needs: build
+    if: github.event.schedule == '17 4 2 * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    steps:
+      - name: Record monthly health check to keep scheduled workflows active
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          month=$(date -u +%Y-%m)
+          data=$(gh api "repos/$REPO/contents/sync-month.txt")
+          old=$(jq -r '.content' <<<"$data" | base64 -d)
+          [[ "$month" == "$old" ]] && exit 0
+          gh api --method PUT "repos/$REPO/contents/sync-month.txt" -f sha="$(jq -r '.sha' <<<"$data")" -f message="Record monthly synchronization check" -f content="$(printf '%s' "$month" | base64 -w0)" >/dev/null
+
+
